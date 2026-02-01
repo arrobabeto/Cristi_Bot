@@ -10,6 +10,12 @@ type HandleInput = {
   now_iso: string;
 };
 
+type NormalizedCommand = {
+  command: string;
+  commandLower: string;
+  rest: string;
+};
+
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)} MXN`;
 }
@@ -24,12 +30,123 @@ function extractDateIso(nowIso: string): string | null {
   return null;
 }
 
+function normalizeCommand(raw: string): NormalizedCommand {
+  const trimmed = raw.trim();
+  if (!trimmed) return { command: "", commandLower: "", rest: "" };
+  const firstToken = trimmed.split(/\s+/)[0] ?? "";
+  let commandToken = firstToken;
+  if (commandToken.startsWith("/")) {
+    commandToken = commandToken.replace(/^\/+/, "");
+  }
+  const atIndex = commandToken.indexOf("@");
+  if (atIndex >= 0) {
+    commandToken = commandToken.slice(0, atIndex);
+  }
+  const rest = trimmed.slice(firstToken.length).trim();
+  return { command: commandToken, commandLower: commandToken.toLowerCase(), rest };
+}
+
+function helpMessage(): string {
+  return (
+    "Comandos disponibles:\n" +
+    "- /help o ayuda\n" +
+    "- /summary [YYYY-MM]\n" +
+    "- /balance 5000\n" +
+    "- /budget 6000 2026-02\n" +
+    "- /deudas\n" +
+    "- debt Visa priority=HIGH balance=12000 min=500 due=15\n" +
+    "- can i buy 250 \"Comida\" 2026-02-01\n" +
+    "\nEjemplos rapidos:\n" +
+    "summary\n" +
+    "balance 5000\n" +
+    "budget 6000 2026-02\n" +
+    "debt Visa priority=HIGH balance=12000 min=500 due=15\n" +
+    "can i buy 250 \"Comida\" 2026-02-01\n" +
+    "gasto 87 openai"
+  );
+}
+
+function formatMissingFields(fields: string[]): string {
+  if (!fields.length) return "";
+  const mapped = fields.map((field) => {
+    if (field === "amount") return "monto";
+    if (field === "category") return "categoria";
+    if (field === "category_type") return "tipo de categoria";
+    return field;
+  });
+  return `Falta: ${mapped.join(", ")}.`;
+}
+
+function extractTransactionCandidate(input: {
+  raw: string;
+  now_iso: string;
+  type: "EXPENSE" | "INCOME";
+  category_type: "VARIABLE" | "INCOME";
+}): {
+  amount_mxn_cents: number | null;
+  category: string | null;
+  date_iso: string | null;
+  missing_fields: string[];
+} {
+  const missing_fields: string[] = [];
+  const dateMatch = input.raw.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  const date_iso = dateMatch?.[0] ?? extractDateIso(input.now_iso);
+
+  const withoutPrefix = input.raw.replace(/^(gasto|expense|ingreso|income)\b/i, "").trim();
+  const amountMatch = withoutPrefix.match(/-?\d[\d,]*(?:\.\d+)?/);
+  const amount_mxn_cents = amountMatch ? parseMxnToCents(amountMatch[0]) : null;
+  if (amount_mxn_cents === null) missing_fields.push("amount");
+
+  const quoted = withoutPrefix.match(/"([^"]+)"/);
+  let category = quoted?.[1]?.trim() ?? null;
+  if (!category && amountMatch?.index !== undefined) {
+    const afterAmount = withoutPrefix
+      .slice(amountMatch.index + amountMatch[0].length)
+      .replace(dateMatch?.[0] ?? "", "")
+      .trim();
+    category = afterAmount || null;
+  }
+
+  if (!category) missing_fields.push("category");
+
+  return { amount_mxn_cents, category, date_iso, missing_fields };
+}
+
 export async function handleTelegramText(input: HandleInput): Promise<string> {
   const raw = input.text.trim();
   if (!raw) return "Mensaje vacio.";
   const lower = raw.toLowerCase();
+  const normalized = normalizeCommand(raw);
+  const commandLower = normalized.commandLower;
 
-  if (lower.startsWith("balance") || lower.startsWith("set balance")) {
+  if (["help", "ayuda", "start"].includes(commandLower)) {
+    return helpMessage();
+  }
+
+  if (commandLower === "deudas") {
+    const result = await TOOLS.get_debts({
+      user_id: input.user_id,
+      thread_id: input.thread_id,
+    });
+
+    if (!result.ok) return `Error: ${result.error.message}`;
+    if (!result.data.debts.length) return "No hay deudas registradas.";
+
+    const lines = result.data.debts.map((debt, index) => {
+      const balance =
+        debt.balance_mxn_cents === null ? "sin saldo" : formatCents(debt.balance_mxn_cents);
+      const minimum =
+        debt.minimum_payment_mxn_cents === null
+          ? "sin minimo"
+          : formatCents(debt.minimum_payment_mxn_cents);
+      const due = debt.due_day_of_month ? `vence dia ${debt.due_day_of_month}` : "sin vencimiento";
+      return `${index + 1}. ${debt.name} · ${balance} · ${minimum} · ${due} · prioridad ${debt.priority}`;
+    });
+
+    return `Deudas:\n${lines.join("\n")}`;
+  }
+
+  if (commandLower === "balance" || commandLower === "saldo" || lower.startsWith("set balance")) {
     const cents = parseMxnToCents(raw);
     if (cents === null) return "No pude leer el monto de saldo.";
 
@@ -44,7 +161,7 @@ export async function handleTelegramText(input: HandleInput): Promise<string> {
     return `Saldo actualizado: ${formatCents(cents)}.`;
   }
 
-  if (lower.startsWith("budget") || lower.startsWith("set budget")) {
+  if (commandLower === "budget" || commandLower === "presupuesto" || lower.startsWith("set budget")) {
     const cents = parseMxnToCents(raw);
     if (cents === null) return "No pude leer el monto del presupuesto.";
 
@@ -63,7 +180,7 @@ export async function handleTelegramText(input: HandleInput): Promise<string> {
     return `Presupuesto establecido para ${month}: ${formatCents(cents)}.`;
   }
 
-  if (lower.startsWith("debt") || lower.startsWith("set debt")) {
+  if (commandLower === "debt" || lower.startsWith("debt") || lower.startsWith("set debt")) {
     const rest = raw.replace(/^set\s+debt\s+|^debt\s+/i, "").trim();
     if (!rest) return "Falta el nombre de la deuda.";
 
@@ -118,7 +235,11 @@ export async function handleTelegramText(input: HandleInput): Promise<string> {
     return `Deuda guardada: ${name}.`;
   }
 
-  if (lower.startsWith("can i buy") || lower.startsWith("simulate")) {
+  if (
+    commandLower === "simulate" ||
+    lower.startsWith("can i buy") ||
+    lower.startsWith("puedo comprar")
+  ) {
     const cents = parseMxnToCents(raw);
     if (cents === null) return "No pude leer el monto.";
 
@@ -160,7 +281,7 @@ export async function handleTelegramText(input: HandleInput): Promise<string> {
     return `Asequible: ${affordable}. ${reasons} Disponible variable: ${remaining}. Obligaciones: ${obligations}`.trim();
   }
 
-  if (lower.startsWith("summary")) {
+  if (commandLower === "summary" || commandLower === "resumen" || lower.startsWith("summary")) {
     const monthMatch = raw.match(/\b\d{4}-\d{2}\b/);
     const month = monthMatch?.[0] ?? extractMonth(input.now_iso);
     if (!month) return "No pude determinar el mes (YYYY-MM).";
@@ -195,6 +316,9 @@ export async function handleTelegramText(input: HandleInput): Promise<string> {
     ).trim();
   }
 
+  const isExpense = /^(gasto|expense)\b/i.test(raw);
+  const isIncome = /^(ingreso|income)\b/i.test(raw);
+  const defaultCategoryType = isExpense ? "VARIABLE" : isIncome ? "INCOME" : null;
   const parsed = await TOOLS.parse_transaction_from_text({
     user_id: input.user_id,
     thread_id: input.thread_id,
@@ -204,12 +328,62 @@ export async function handleTelegramText(input: HandleInput): Promise<string> {
 
   if (!parsed.ok) return `Error: ${parsed.error.message}`;
 
-  const missing = parsed.data.missing_fields?.length
-    ? `Falta: ${parsed.data.missing_fields.join(", ")}.`
-    : "";
+  let missingFields = parsed.data.missing_fields ?? [];
+  if (defaultCategoryType && missingFields.includes("category_type")) {
+    const enriched = await TOOLS.parse_transaction_from_text({
+      user_id: input.user_id,
+      thread_id: input.thread_id,
+      text: `${raw} category_type:${defaultCategoryType}`,
+      now_iso: input.now_iso,
+    });
+    if (enriched.ok) {
+      missingFields = enriched.data.missing_fields ?? missingFields;
+    }
+  }
+
+  if (defaultCategoryType) {
+    const extracted = extractTransactionCandidate({
+      raw,
+      now_iso: input.now_iso,
+      type: isExpense ? "EXPENSE" : "INCOME",
+      category_type: defaultCategoryType,
+    });
+
+    if (!extracted.missing_fields.length) {
+      const addResult = await TOOLS.add_transaction({
+        user_id: input.user_id,
+        thread_id: input.thread_id,
+        transaction: {
+          type: isExpense ? "EXPENSE" : "INCOME",
+          amount_mxn_cents: extracted.amount_mxn_cents ?? undefined,
+          category_type: defaultCategoryType,
+          category: extracted.category ?? undefined,
+          description: raw,
+          date_iso: extracted.date_iso ?? undefined,
+        },
+      });
+
+      if (!addResult.ok) return `Error: ${addResult.error.message}`;
+
+      const label = isExpense ? "Gasto" : "Ingreso";
+      return `${label} registrado: ${formatCents(
+        addResult.data.stored.amount_mxn_cents
+      )} en ${addResult.data.stored.category}.`;
+    }
+
+    return `Necesito mas datos para registrar la transaccion. ${formatMissingFields(
+      extracted.missing_fields
+    )}`.trim();
+  }
+
+  const missing = missingFields.length ? formatMissingFields(missingFields) : "";
   const ambiguities = parsed.data.ambiguities?.length
     ? `Dudas: ${parsed.data.ambiguities.join(", ")}.`
     : "";
 
-  return `Necesito mas datos para registrar la transaccion. ${missing} ${ambiguities}`.trim();
+  return (
+    "Necesito mas datos para registrar la transaccion. " +
+    `${missing} ${ambiguities}`.trim() +
+    "\nEjemplos: \"gasto 87 openai\" o \"ingreso 12000 sueldo\"."
+  ).trim();
 }

@@ -7,12 +7,6 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (process.env.NODE_ENV === "production" && !secret) {
-    return NextResponse.json(
-      { ok: false, error: { code: "AUTH_ERROR", message: "Missing TELEGRAM_WEBHOOK_SECRET" } },
-      { status: 500 }
-    );
-  }
   if (secret) {
     const header = req.headers.get("x-telegram-bot-api-secret-token");
     if (header !== secret) {
@@ -46,18 +40,27 @@ export async function POST(req: Request) {
   const thread_id = String(chatId);
   const now_iso = new Date().toISOString();
 
-  const reply = await handleTelegramText({
-    user_id,
-    thread_id,
-    text,
-    now_iso,
-  });
+  let reply = "No pude procesar tu mensaje.";
+  try {
+    reply = await handleTelegramText({
+      user_id,
+      thread_id,
+      text,
+      now_iso,
+    });
+  } catch {
+    reply = "Ocurrio un error al procesar tu mensaje. Intenta de nuevo.";
+  }
 
   if (process.env.NODE_ENV !== "production") {
     return NextResponse.json({ ok: true, reply });
   }
 
-  await sendTelegramMessage(chatId, reply);
+  try {
+    await sendTelegramMessage(chatId, reply);
+  } catch {
+    return NextResponse.json({ ok: true });
+  }
 
   return NextResponse.json({ ok: true });
 }

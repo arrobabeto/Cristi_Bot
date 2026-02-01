@@ -23,6 +23,19 @@ Docs available at /how-it-works
 
 Optional:
 - `TELEGRAM_WEBHOOK_SECRET`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+
+`TELEGRAM_WEBHOOK_SECRET` should use only A-Z, a-z, 0-9, `_`, `-`.
+
+### How to use in Telegram
+- `/start` or `/help`
+- `/summary` or `summary`
+- `/balance 5000`
+- `/budget 6000 2026-02`
+- `/deudas`
+- `gasto 87 openai`
+- `ingreso 12000 sueldo`
 
 ### Run dev server
 ```bash
