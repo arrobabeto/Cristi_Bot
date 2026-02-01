@@ -1,0 +1,123 @@
+{
+  "currency": "MXN",
+  "rounding_logic": "ceiling_last_digit",
+  "income": [
+    {
+      "name": "Base Salary",
+      "amount": 15000,
+      "frequency": "quincenal",
+      "days": []
+    },
+    {
+      "name": "Suiza Salary",
+      "amount": 45000,
+      "amount_chf": 2000,
+      "frequency": "monthly",
+      "day": 28
+    }
+  ],
+  "fixed_expenses": [
+    { "name": "Supermarket", "amount": 3500 },
+    { "name": "Gasoline", "amount": 1000 },
+    { "name": "Rent", "amount": 1600 },
+    { "name": "Subscriptions", "amount": 958 },
+    { "name": "Electricity", "amount": 300 },
+    { "name": "Gas service", "amount": 300 },
+    { "name": "Water", "amount": 100 },
+    { "name": "Internet", "amount": 350 },
+    { "name": "Mobile service", "amount": 349 },
+    { "name": "Mac payment", "amount": 300 },
+    { "name": "Donation", "amount": 4482 },
+    { "name": "Car 1 loan", "amount": 10000, "ends": "2026-06" },
+    { "name": "Car 2 loan", "amount": 4000 }
+  ],
+  "variable_budget": {
+    "monthly_cap": 6000,
+    "categories": [
+      "Eating out",
+      "Entertainment",
+      "Personal purchases",
+      "Miscellaneous discretionary spending"
+    ]
+  },
+  "debts": [
+    {
+      "name": "Sanborns CC",
+      "total": 2332,
+      "msi_monthly": 167,
+      "priority": "High"
+    },
+    {
+      "name": "NU CC",
+      "total": 24385,
+      "priority": "High"
+    },
+    {
+      "name": "Rappi CC",
+      "total": 17230.33,
+      "min_payment": 1253,
+      "priority": "Medium-high"
+    },
+    {
+      "name": "Liverpool Travel MSI",
+      "remaining_payments": 1,
+      "amount": 3796.5,
+      "ends": "2026-03",
+      "priority": "Do not accelerate"
+    },
+    {
+      "name": "Liverpool Drone MSI",
+      "remaining_payments": 1,
+      "amount": 1083,
+      "ends": "2026-03",
+      "priority": "Do not accelerate"
+    },
+    {
+      "name": "MacBook MSI",
+      "total": 30000,
+      "monthly": 3333,
+      "months": 9,
+      "start": "2026-02",
+      "priority": "Do not accelerate"
+    },
+    {
+      "name": "Mercado Pago Loan 1",
+      "remaining_payment": 5481.88,
+      "ends": "2026-03",
+      "priority": "Medium"
+    },
+    {
+      "name": "Mercado Pago Loan 2",
+      "total_remaining": 7995.94,
+      "monthly": 3997.97,
+      "ends": "2026-03",
+      "priority": "Medium"
+    },
+    {
+      "name": "Mercado Pago Small Loan",
+      "monthly": 2900.08,
+      "priority": "High"
+    },
+    {
+      "name": "Mercado Pago CC",
+      "outstanding": 7146,
+      "priority": "Medium-high"
+    }
+  ],
+  "rules": {
+    "no_new_debt": true,
+    "no_late_payments": true,
+    "donation_non_negotiable": true,
+    "msi_no_acceleration": true,
+    "impulse_threshold": null
+  },
+  "agent_behavior": {
+    "response_style": "neutral_with_warnings",
+    "allow_hard_no": true,
+    "hard_no_conditions": [
+      "cannot afford",
+      "interest doubles cost",
+      "not for work"
+    ]
+  }
+}
