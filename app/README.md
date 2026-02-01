@@ -12,6 +12,8 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Telegram setup
 
+Docs available at /how-it-works
+
 ### Required env vars
 - `TELEGRAM_BOT_TOKEN`
 - `TOOLS_API_KEY`
